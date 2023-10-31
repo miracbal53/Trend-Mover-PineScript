@@ -1,0 +1,180 @@
+//@version=5
+strategy(title="Trend Mover System",overlay=true, calc_on_every_tick=true, currency=currency.USD , commission_type=strategy.commission.percent , commission_value=0.2 , initial_capital=100 , default_qty_type=strategy.percent_of_equity , default_qty_value = 100 )
+
+// 200 EMA
+lenema = input.int(200, minval=1, title='Length EMA',group="200 EMA")
+srcema = input.source(close, title='Source',group="200 EMA")
+offsetema = input.int(title='Offset', defval=0, minval=-500, maxval=500,group="200 EMA")
+out = ta.ema(srcema, lenema)
+plot(out, title='EMA', color=color.new(color.white, 0), offset=offsetema)
+
+// 50 EMA
+lenema50 = input.int(50, minval=1, title='Length EMA',group="50 EMA")
+srcema50 = input.source(close, title='Source',group="50 EMA")
+offsetema50 = input.int(title='Offset', defval=0, minval=-500, maxval=500,group="50 EMA")
+out50 = ta.ema(srcema50, lenema50)
+plot(out50, title='EMA', color=color.new(color.orange, 0), offset=offsetema50)
+
+
+// Donchain Trend Şeridi
+
+dlen = input.int(defval = 20, title = "Donchian Channel Period", minval = 10,group="Donchain Trend")
+
+dchannel(len)=>
+    float hh = ta.highest(len)
+    float ll = ta.lowest(len)
+    
+    int trend = 0
+    trend := close > hh[1] ? 1 : close < ll[1] ? -1 : nz(trend[1])
+    
+dchannelalt(len, maintrend)=>
+    float hh = ta.highest(len)
+    float ll = ta.lowest(len)
+    
+    int trend = 0
+    trend := close > hh[1] ? 1 : close < ll[1] ? -1 : nz(trend[1])
+    maintrend == 1  ? trend == 1  ? #00FF00ff :  #00FF009f :
+     maintrend == -1 ? trend == -1 ? #FF0000ff :  #FF00009f :
+     na
+
+maintrend = dchannel(dlen)
+
+
+//plot( 5, color = dchannelalt(dlen - 0, maintrend), style = plot.style_columns, histbase= 0)
+//plot(10, color = dchannelalt(dlen - 1, maintrend), style = plot.style_columns, histbase= 5)
+//plot(15, color = dchannelalt(dlen - 2, maintrend), style = plot.style_columns, histbase=10)
+//plot(20, color = dchannelalt(dlen - 3, maintrend), style = plot.style_columns, histbase=15)
+//plot(25, color = dchannelalt(dlen - 4, maintrend), style = plot.style_columns, histbase=20)
+//plot(30, color = dchannelalt(dlen - 5, maintrend), style = plot.style_columns, histbase=25)
+//plot(35, color = dchannelalt(dlen - 6, maintrend), style = plot.style_columns, histbase=30)
+//plot(40, color = dchannelalt(dlen - 7, maintrend), style = plot.style_columns, histbase=35)
+//plot(45, color = dchannelalt(dlen - 8, maintrend), style = plot.style_columns, histbase=40)
+//plot(50, color = dchannelalt(dlen - 9, maintrend), style = plot.style_columns, histbase=45)
+
+// Hull Suite
+
+//INPUT
+src = input.source(close, title="Source",group="Hull Suite")
+modeSwitch = input.string("Hma", title="Hull Variation", options=["Hma", "Thma", "Ehma"],group="Hull Suite")
+length = input.int(55, title="Length(180-200 for floating S/R , 55 for swing entry)",group="Hull Suite")
+lengthMult = input.float(1.0, title="Length multiplier (Used to view higher timeframes with straight band)",group="Hull Suite")
+
+useHtf = input.bool(false, title="Show Hull MA from X timeframe? (good for scalping)",group="Hull Suite")
+htf = input.string("240", title="Higher timeframe",group="Hull Suite")
+
+switchColor = input.bool(true, "Color Hull according to trend?")
+candleCol = input.bool(false,title="Color candles based on Hull's Trend?",group="Hull Suite")
+visualSwitch  = input.bool(true, title="Show as a Band?",group="Hull Suite")
+thicknesSwitch = input.int(1, title="Line Thickness",group="Hull Suite")
+transpSwitch = input.int(40, title="Band Transparency",step=5,group="Hull Suite")
+
+//FUNCTIONS
+//HMA
+HMA(_src, _length) =>  ta.wma(2 * ta.wma(_src, _length / 2) - ta.wma(_src, _length), math.round(math.sqrt(_length)))
+//EHMA    
+EHMA(_src, _length) =>  ta.ema(2 * ta.ema(_src, _length / 2) - ta.ema(_src, _length), math.round(math.sqrt(_length)))
+//THMA    
+THMA(_src, _length) =>  ta.wma(ta.wma(_src,_length / 3) * 3 - ta.wma(_src, _length / 2) - ta.wma(_src, _length), _length)
+    
+//SWITCH
+Mode(modeSwitch, src, len) =>
+      modeSwitch == "Hma"  ? HMA(src, len) :
+      modeSwitch == "Ehma" ? EHMA(src, len) : 
+      modeSwitch == "Thma" ? THMA(src, len/2) : na
+
+//OUT
+_hull = Mode(modeSwitch, src, int(length * lengthMult))
+HULL = useHtf ? request.security(syminfo.ticker, htf, _hull) : _hull
+MHULL = HULL[0]
+SHULL = HULL[2]
+
+//COLOR
+hullColor = switchColor ? (HULL > HULL[2] ? #00ff00 : #ff0000) : #ff9800
+
+//PLOT
+///< Frame
+Fi1 = plot(MHULL, title="MHULL",  linewidth=thicknesSwitch,color=color.new(hullColor,50))
+Fi2 = plot(visualSwitch ? SHULL : na, title="SHULL",  linewidth=thicknesSwitch,color=color.new(hullColor,50))
+///< Ending Filler
+fill(Fi1, Fi2, title="Band Filler", color=color.new(hullColor,transpSwitch))
+///BARCOLOR
+barcolor(color = candleCol ? (switchColor ? hullColor : na) : na)
+
+
+// SuperTrend
+
+atrPeriod = input(10, "ATR Length",group="SuperTrend")
+factor = input.float(3.0, "Factor", step = 0.01,group="SuperTrend")
+
+[supertrend, direction] = ta.supertrend(factor, atrPeriod)
+
+bodyMiddle = plot((open + close) / 2, display=display.none)
+upTrend = plot(direction < 0 ? supertrend : na, "Up Trend", color = color.green, style=plot.style_linebr)
+downTrend = plot(direction < 0? na : supertrend, "Down Trend", color = color.red, style=plot.style_linebr)
+
+fill(bodyMiddle, upTrend, color.new(color.green, 90), fillgaps=false)
+fill(bodyMiddle, downTrend, color.new(color.red, 90), fillgaps=false)
+
+// Strategy Year
+
+StartYear = input.int(defval=2021,step = 1 ,minval = 2010 ,maxval= 2023,title="Start Year", group="Strategy Options")
+StartMonth = input.int(defval=1,step = 1,minval = 1 ,maxval = 12 ,title="Start Month",group="Strategy Options")
+StartDay = input.int(defval=1,step = 1,minval = 1 ,maxval = 30 ,title="Start Day",group="Strategy Options")
+TestPeriodStart = timestamp(year =StartYear,month= StartMonth,day = StartDay)
+//FinishYear = input.int(defval=2022,step = 1 ,minval = 2010 ,maxval= 2023,title="Finish Year", group="Strategy Options")
+//FinishMonth = input.int(defval=1,step = 1,minval = 1 ,maxval = 12 ,title="Finish Month",group="Strategy Options")
+//FinishDay = input.int(defval=1,step = 1,minval = 1 ,maxval = 30 ,title="Finish Day",group="Strategy Options")
+//TestPeriodStop = timestamp(year =FinishYear,month =FinishMonth,day = FinishDay)
+
+
+TestPeriod () => 
+    time >= TestPeriodStart ? true : false 
+
+// ATR Bands
+
+//srcUpper = input.source(title = "Source Upper", defval = close)
+//srcLower = input.source(title = "Source Lower", defval = close)
+//atrMultiplierUpper = input(title = "ATR Multiplier Upper", defval = 3)
+//atrMultiplierLower = input(title = "ATR Multiplier Lower", defval = 3)
+LongRR = input.float(title= "For Long R:R ?",defval = 1.0,step=0.1, group="Strategy Options")
+ShortRR = input.float(title="For Short R:R ?",defval = 1.0,step=0.1,group="Strategy Options")
+// ATR
+atr = ta.atr(atrPeriod)
+
+// Plotting
+//plot(srcUpper + atr * atrMultiplierUpper, color = green)
+//plot(srcLower - atr * atrMultiplierLower, color = red)
+
+
+// Strategy Rules
+
+entryprice = strategy.opentrades.entry_price(strategy.opentrades - 1)
+entrytime = strategy.opentrades.entry_time(strategy.opentrades - 1 )
+entrybarindex = bar_index - strategy.opentrades.entry_bar_index(strategy.opentrades - 1 )
+TPPrice1 = (entryprice*(entryprice/supertrend[entrybarindex]))
+
+
+TPlong = close >= close[entrybarindex] + atr[entrybarindex] * (3*LongRR)
+SLlong =  close <= supertrend[entrybarindex]
+
+TPshort = close <= close[entrybarindex] - atr[entrybarindex] * (3*ShortRR)
+SLshort = close >= supertrend[entrybarindex]
+
+
+
+longCondition = (close > out) and maintrend == 1 and direction == -1 and HULL[0] > HULL[2]
+if (longCondition) and TestPeriod()== true 
+    strategy.entry("LONG", strategy.long)
+if (TPlong) and TestPeriod()
+    strategy.close("LONG",comment="LONG take profit")
+if (SLlong) and TestPeriod()
+    strategy.close("LONG",comment="LONG stop loss")
+
+shortCondition = (close < out) and maintrend == -1 and direction == 1 and HULL[0] < HULL[2]
+if (shortCondition) and TestPeriod()== true
+    strategy.entry("SHORT", strategy.short)
+if (TPshort) and TestPeriod()
+    strategy.close("SHORT",comment="SHORT take profit")
+if (SLshort) and TestPeriod()
+    strategy.close("SHORT",comment="SHORT stop loss")
+
